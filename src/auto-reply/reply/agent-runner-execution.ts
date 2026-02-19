@@ -301,11 +301,11 @@ export async function runAgentTurnWithFallback(params: {
             onReasoningStream:
               params.typingSignals.shouldStartOnReasoning || params.opts?.onReasoningStream
                 ? async (payload) => {
+                    await params.typingSignals.signalReasoningDelta();
                     await params.opts?.onReasoningStream?.({
                       text: payload.text,
                       mediaUrls: payload.mediaUrls,
                     });
-                    await params.typingSignals.signalReasoningDelta();
                   }
                 : undefined,
             onReasoningEnd: params.opts?.onReasoningEnd,
