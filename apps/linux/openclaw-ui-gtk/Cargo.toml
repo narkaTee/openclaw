@@ -1,0 +1,9 @@
+[package]
+name = "openclaw-ui-gtk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+openclaw-core = { path = "../openclaw-core" }
+gtk4 = "0.10.3"
+webkit6 = "0.5.0"

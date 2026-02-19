@@ -1,0 +1,7 @@
+[workspace]
+members = [
+  "openclaw-core",
+  "openclaw-linux",
+  "openclaw-ui-gtk",
+]
+resolver = "2"

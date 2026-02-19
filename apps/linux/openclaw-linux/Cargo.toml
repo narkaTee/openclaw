@@ -1,0 +1,19 @@
+[package]
+name = "openclaw-linux"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+openclaw-core = { path = "../openclaw-core" }
+openclaw-ui-gtk = { path = "../openclaw-ui-gtk" }
+log = { version = "0.4.29", features = ["std"] }
+tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros", "time"] }
+json5 = "0.4.1"
+serde_json = "1.0.140"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio-tungstenite = "0.26.2"
+futures-util = "0.3.31"
+url = "2.5.4"
+base64 = "0.22.1"
+ed25519-dalek = { version = "2.1.1", features = ["pkcs8"] }
+pem = "3.0.4"
