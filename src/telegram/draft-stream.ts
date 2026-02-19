@@ -62,19 +62,19 @@ export function createTelegramDraftStream(params: {
     if (!trimmed) {
       return false;
     }
-    if (trimmed.length > maxChars) {
-      // Telegram text messages/edits cap at 4096 chars.
-      // Stop streaming once we exceed the cap to avoid repeated API failures.
-      stopped = true;
-      params.warn?.(
-        `telegram stream preview stopped (text length ${trimmed.length} > ${maxChars})`,
-      );
-      return false;
-    }
     const rendered = params.renderText?.(trimmed) ?? { text: trimmed };
     const renderedText = rendered.text.trimEnd();
     const renderedParseMode = rendered.parseMode;
     if (!renderedText) {
+      return false;
+    }
+    if (renderedText.length > maxChars) {
+      // Telegram text messages/edits cap at 4096 chars.
+      // Stop streaming once we exceed the cap to avoid repeated API failures.
+      stopped = true;
+      params.warn?.(
+        `telegram stream preview stopped (text length ${renderedText.length} > ${maxChars})`,
+      );
       return false;
     }
     if (renderedText === lastSentText && renderedParseMode === lastSentParseMode) {

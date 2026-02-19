@@ -153,6 +153,28 @@ describe("createTelegramDraftStream", () => {
       parse_mode: "HTML",
     });
   });
+
+  it("enforces maxChars after renderText expansion", async () => {
+    const api = createMockDraftApi();
+    const warn = vi.fn();
+    const stream = createTelegramDraftStream({
+      // oxlint-disable-next-line typescript/no-explicit-any
+      api: api as any,
+      chatId: 123,
+      maxChars: 100,
+      renderText: () => ({ text: `<b>${"<".repeat(120)}</b>`, parseMode: "HTML" }),
+      warn,
+    });
+
+    stream.update("short raw text");
+    await stream.flush();
+
+    expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(api.editMessageText).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("telegram stream preview stopped (text length 127 > 100)"),
+    );
+  });
 });
 
 describe("draft stream initial message debounce", () => {

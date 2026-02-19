@@ -494,10 +494,10 @@ export const dispatchTelegramMessage = async ({
           : undefined,
         onReasoningStream: reasoningLane.stream
           ? (payload) => {
-              // In partial mode, split between reasoning blocks only when the
-              // next reasoning stream starts. Splitting at reasoning-end can
-              // orphan the active preview and cause duplicate reasoning sends.
-              if (streamMode === "partial" && splitReasoningOnNextStream) {
+              // Split between reasoning blocks only when the next reasoning
+              // stream starts. Splitting at reasoning-end can orphan the active
+              // preview and cause duplicate reasoning sends on reasoning final.
+              if (splitReasoningOnNextStream) {
                 reasoningLane.stream?.forceNewMessage();
                 resetDraftLaneState(reasoningLane);
                 splitReasoningOnNextStream = false;
@@ -516,15 +516,7 @@ export const dispatchTelegramMessage = async ({
           : undefined,
         onReasoningEnd: reasoningLane.stream
           ? () => {
-              // Block mode keeps hard message boundaries at reasoning-end.
-              if (streamMode === "block") {
-                if (reasoningLane.hasStreamedMessage) {
-                  reasoningLane.stream?.forceNewMessage();
-                }
-                resetDraftLaneState(reasoningLane);
-                return;
-              }
-              // Partial mode splits when/if a later reasoning block begins.
+              // Split when/if a later reasoning block begins.
               splitReasoningOnNextStream = reasoningLane.hasStreamedMessage;
             }
           : undefined,
