@@ -165,10 +165,9 @@ export function handleMessageUpdate(
     }
   }
 
-  const streamedReasoning = extractThinkingFromTaggedStream(ctx.state.deltaBuffer);
   if (ctx.state.streamReasoning) {
     // Handle partial <think> tags: stream whatever reasoning is visible so far.
-    ctx.emitReasoningStream(streamedReasoning);
+    ctx.emitReasoningStream(extractThinkingFromTaggedStream(ctx.state.deltaBuffer));
   }
 
   const next = ctx
@@ -277,9 +276,7 @@ export function handleMessageEnd(
   });
   const rawThinking =
     ctx.state.includeReasoning || ctx.state.streamReasoning
-      ? extractAssistantThinking(assistantMessage) ||
-        extractThinkingFromTaggedStream(ctx.state.deltaBuffer) ||
-        extractThinkingFromTaggedText(rawText)
+      ? extractAssistantThinking(assistantMessage) || extractThinkingFromTaggedText(rawText)
       : "";
   const formattedReasoning = rawThinking ? formatReasoningMessage(rawThinking) : "";
   const trimmedText = text.trim();
