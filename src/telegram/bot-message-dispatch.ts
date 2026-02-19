@@ -169,6 +169,7 @@ export const dispatchTelegramMessage = async ({
     hasStreamedMessage: false,
     chunker: reasoningDraftChunker,
   };
+  let splitReasoningOnNextStream = false;
   const resetDraftLaneState = (lane: DraftLaneState) => {
     lane.lastPartialText = "";
     lane.draftText = "";
@@ -485,7 +486,17 @@ export const dispatchTelegramMessage = async ({
           ? (payload) => updateDraftFromPartial(answerLane, payload.text)
           : undefined,
         onReasoningStream: reasoningLane.stream
-          ? (payload) => updateDraftFromPartial(reasoningLane, payload.text)
+          ? (payload) => {
+              // In partial mode, split between reasoning blocks only when the
+              // next reasoning stream starts. Splitting at reasoning-end can
+              // orphan the active preview and cause duplicate reasoning sends.
+              if (streamMode === "partial" && splitReasoningOnNextStream) {
+                reasoningLane.stream?.forceNewMessage();
+                resetDraftLaneState(reasoningLane);
+                splitReasoningOnNextStream = false;
+              }
+              updateDraftFromPartial(reasoningLane, payload.text);
+            }
           : undefined,
         onAssistantMessageStart: answerLane.stream
           ? () => {
@@ -498,12 +509,16 @@ export const dispatchTelegramMessage = async ({
           : undefined,
         onReasoningEnd: reasoningLane.stream
           ? () => {
-              // Reasoning should appear in its own lane and each block should keep
-              // a separate bubble for readability.
-              if (reasoningLane.hasStreamedMessage) {
-                reasoningLane.stream?.forceNewMessage();
+              // Block mode keeps hard message boundaries at reasoning-end.
+              if (streamMode === "block") {
+                if (reasoningLane.hasStreamedMessage) {
+                  reasoningLane.stream?.forceNewMessage();
+                }
+                resetDraftLaneState(reasoningLane);
+                return;
               }
-              resetDraftLaneState(reasoningLane);
+              // Partial mode splits when/if a later reasoning block begins.
+              splitReasoningOnNextStream = reasoningLane.hasStreamedMessage;
             }
           : undefined,
         onModelSelected,
