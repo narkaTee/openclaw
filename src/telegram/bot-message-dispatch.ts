@@ -26,6 +26,7 @@ import type { TelegramStreamMode } from "./bot/types.js";
 import type { TelegramInlineButtons } from "./button-types.js";
 import { resolveTelegramDraftStreamingChunking } from "./draft-chunking.js";
 import { createTelegramDraftStream } from "./draft-stream.js";
+import { renderTelegramHtmlText } from "./format.js";
 import { editMessageTelegram } from "./send.js";
 import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 
@@ -101,6 +102,15 @@ export const dispatchTelegramMessage = async ({
   } = context;
 
   const draftMaxChars = Math.min(textLimit, 4096);
+  const tableMode = resolveMarkdownTableMode({
+    cfg,
+    channel: "telegram",
+    accountId: route.accountId,
+  });
+  const renderDraftPreview = (text: string) => ({
+    text: renderTelegramHtmlText(text, { tableMode }),
+    parseMode: "HTML" as const,
+  });
   const accountBlockStreamingEnabled =
     typeof telegramCfg.blockStreaming === "boolean"
       ? telegramCfg.blockStreaming
@@ -117,6 +127,7 @@ export const dispatchTelegramMessage = async ({
         thread: threadSpec,
         replyToMessageId: draftReplyToMessageId,
         minInitialChars: draftMinInitialChars,
+        renderText: renderDraftPreview,
         log: logVerbose,
         warn: logVerbose,
       })
@@ -129,6 +140,7 @@ export const dispatchTelegramMessage = async ({
         thread: threadSpec,
         replyToMessageId: draftReplyToMessageId,
         minInitialChars: draftMinInitialChars,
+        renderText: renderDraftPreview,
         log: logVerbose,
         warn: logVerbose,
       })
@@ -256,11 +268,6 @@ export const dispatchTelegramMessage = async ({
   const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
     cfg,
     agentId: route.agentId,
-    channel: "telegram",
-    accountId: route.accountId,
-  });
-  const tableMode = resolveMarkdownTableMode({
-    cfg,
     channel: "telegram",
     accountId: route.accountId,
   });

@@ -133,6 +133,26 @@ describe("createTelegramDraftStream", () => {
     expect(api.sendMessage).toHaveBeenCalledTimes(2);
     expect(api.sendMessage).toHaveBeenLastCalledWith(123, "After thinking", undefined);
   });
+
+  it("supports rendered previews with parse_mode", async () => {
+    const api = createMockDraftApi();
+    const stream = createTelegramDraftStream({
+      // oxlint-disable-next-line typescript/no-explicit-any
+      api: api as any,
+      chatId: 123,
+      renderText: (text) => ({ text: `<i>${text}</i>`, parseMode: "HTML" }),
+    });
+
+    stream.update("hello");
+    await stream.flush();
+    expect(api.sendMessage).toHaveBeenCalledWith(123, "<i>hello</i>", { parse_mode: "HTML" });
+
+    stream.update("hello again");
+    await stream.flush();
+    expect(api.editMessageText).toHaveBeenCalledWith(123, 17, "<i>hello again</i>", {
+      parse_mode: "HTML",
+    });
+  });
 });
 
 describe("draft stream initial message debounce", () => {
