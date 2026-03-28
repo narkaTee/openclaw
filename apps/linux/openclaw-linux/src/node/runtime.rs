@@ -43,7 +43,7 @@ impl core_runtime::CanvasPort for UiCanvasPort {
 #[cfg(test)]
 mod tests {
     use super::{BridgeInvokeRequest, NodeRuntime};
-    use openclaw_core::ui::{NodeStatusView, UiControl};
+    use openclaw_core::ui::{NodeStatusView, OnboardingViewState, UiControl};
     use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
@@ -59,6 +59,8 @@ mod tests {
             let mut statuses = self.statuses.lock().expect("status lock");
             statuses.push(status);
         }
+
+        fn set_onboarding_state(&self, _state: OnboardingViewState) {}
 
         fn present_canvas(&self, url: Option<String>) {
             let mut calls = self.present_calls.lock().expect("present lock");

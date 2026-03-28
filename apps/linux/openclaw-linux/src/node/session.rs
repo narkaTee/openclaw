@@ -2,19 +2,26 @@ use crate::node::runtime::{BridgeInvokeRequest, BridgeInvokeResponse, NodeError}
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::Signer;
-use ed25519_dalek::pkcs8::DecodePrivateKey;
+use ed25519_dalek::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use tokio::time::{Duration, timeout};
 use tokio_tungstenite::MaybeTlsStream;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
+
+const LINUX_APP_DEVICE_IDENTITY_FILE: &str = "linux-app-device.json";
+const LINUX_APP_DEVICE_AUTH_FILE: &str = "linux-app-device-auth.json";
 
 #[derive(Clone, Debug)]
 pub struct ConnectOptions {
@@ -75,7 +82,7 @@ struct NodeInvokeRequestPayload {
     timeout_ms: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct DeviceIdentityFile {
     #[serde(rename = "deviceId")]
     device_id: String,
@@ -129,7 +136,7 @@ impl GatewayNodeSession {
             warn!("gateway connect challenge missing or timed out");
         }
         let device_identity = load_device_identity();
-        let device_token = load_device_token();
+        let device_token = load_device_token(device_identity.as_ref());
         let auth_token = device_token.as_deref().or(token);
         if device_token.is_some() {
             info!("gateway auth using device token");
@@ -452,15 +459,23 @@ fn build_device_payload(
 }
 
 fn load_device_identity() -> Option<DeviceIdentityFile> {
-    let path = resolve_identity_path("device.json")?;
-    let raw = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&raw).ok()
+    match load_or_create_device_identity() {
+        Ok(identity) => Some(identity),
+        Err(error) => {
+            warn!("failed to load linux app device identity: {}", error);
+            None
+        }
+    }
 }
 
-fn load_device_token() -> Option<String> {
-    let path = resolve_identity_path("device-auth.json")?;
+fn load_device_token(identity: Option<&DeviceIdentityFile>) -> Option<String> {
+    let identity = identity?;
+    let path = resolve_identity_path(LINUX_APP_DEVICE_AUTH_FILE)?;
     let raw = fs::read_to_string(path).ok()?;
     let auth: DeviceAuthFile = serde_json::from_str(&raw).ok()?;
+    if auth.device_id != identity.device_id {
+        return None;
+    }
     auth.tokens
         .get("node")
         .map(|token| token.token.trim().to_string())
@@ -475,6 +490,73 @@ fn resolve_identity_path(name: &str) -> Option<PathBuf> {
             .join("identity")
             .join(name),
     )
+}
+
+fn load_or_create_device_identity() -> Result<DeviceIdentityFile, String> {
+    let path = resolve_identity_path(LINUX_APP_DEVICE_IDENTITY_FILE)
+        .ok_or_else(|| "HOME is not set".to_string())?;
+    if let Ok(raw) = fs::read_to_string(&path) {
+        if let Ok(existing) = serde_json::from_str::<DeviceIdentityFile>(&raw) {
+            return Ok(existing);
+        }
+    }
+
+    let generated = generate_device_identity()?;
+    save_device_identity_file(&path, &generated)?;
+    Ok(generated)
+}
+
+fn save_device_identity_file(path: &PathBuf, identity: &DeviceIdentityFile) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let mut bytes = serde_json::to_vec_pretty(identity).map_err(|err| err.to_string())?;
+    bytes.push(b'\n');
+    fs::write(path, bytes).map_err(|err| err.to_string())?;
+    #[cfg(unix)]
+    {
+        let perms = fs::Permissions::from_mode(0o600);
+        let _ = fs::set_permissions(path, perms);
+    }
+    Ok(())
+}
+
+fn generate_device_identity() -> Result<DeviceIdentityFile, String> {
+    let mut seed = [0_u8; 32];
+    let mut random = fs::File::open("/dev/urandom").map_err(|err| err.to_string())?;
+    random
+        .read_exact(&mut seed)
+        .map_err(|err| err.to_string())?;
+
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let public_key = signing_key.verifying_key().to_bytes();
+    let mut hasher = Sha256::new();
+    hasher.update(public_key);
+    let device_id = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+
+    let private_der = signing_key.to_pkcs8_der().map_err(|err| err.to_string())?;
+    let private_key_pem = pem::encode_config(
+        &pem::Pem::new("PRIVATE KEY", private_der.as_bytes()),
+        pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF),
+    );
+    let public_der = signing_key
+        .verifying_key()
+        .to_public_key_der()
+        .map_err(|err| err.to_string())?;
+    let public_key_pem = pem::encode_config(
+        &pem::Pem::new("PUBLIC KEY", public_der.as_bytes()),
+        pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF),
+    );
+
+    Ok(DeviceIdentityFile {
+        device_id,
+        public_key_pem,
+        private_key_pem,
+    })
 }
 
 fn build_invoke_result(
